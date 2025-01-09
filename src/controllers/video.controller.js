@@ -122,7 +122,7 @@ const deleteVideo = asyncHandler(async (req, res) => {
   }
   const isVideoDeletedFromCloudinary = await deleteFromCloudinary(video.videoFile, "video");
   const isThumbnailDeletedFromCloudinary = await deleteFromCloudinary(video.thumbnail, "image");
-  if (!isVideoDeletedFromCloudinary && !isThumbnailDeletedFromCloudinary) {
+  if (!isVideoDeletedFromCloudinary || !isThumbnailDeletedFromCloudinary) {
     throw new ApiError(
       400,
       "Failed to delete videoFile or thumbnail from cloudinary"
