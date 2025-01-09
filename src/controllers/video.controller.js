@@ -4,7 +4,10 @@ import { User } from "../models/user.model.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { uploadOnCloudinary } from "../utils/cloudinary.js";
+import {
+  uploadOnCloudinary,
+  deleteFromCloudinary,
+} from "../utils/cloudinary.js";
 
 const getAllVideos = asyncHandler(async (req, res) => {
   const { page = 1, limit = 10, query, sortBy, sortType, userId } = req.query;
@@ -104,8 +107,31 @@ const updateVideo = asyncHandler(async (req, res) => {
 });
 
 const deleteVideo = asyncHandler(async (req, res) => {
-  const { videoId } = req.params;
+  // const { videoId } = req.params;
   //TODO: delete video
+  const { videoId } = req.params;
+  if (!isValidObjectId(videoId)) {
+    throw new ApiError(400, "Invalid Video Id");
+  }
+  const video = await Video.findById(videoId);
+  if (!video) {
+    throw new ApiError(400, "Incorrect VideoId");
+  }
+  if (!video.owner.equals(req.user._id)) {
+    throw new ApiError(400, "Unauthorized access");
+  }
+  const isVideoDeletedFromCloudinary = await deleteFromCloudinary(video.videoFile, "video");
+  const isThumbnailDeletedFromCloudinary = await deleteFromCloudinary(video.thumbnail, "image");
+  if (!isVideoDeletedFromCloudinary && !isThumbnailDeletedFromCloudinary) {
+    throw new ApiError(
+      400,
+      "Failed to delete videoFile or thumbnail from cloudinary"
+    );
+  }
+  await video.deleteOne();
+  return res
+    .status(200)
+    .json(new ApiResponse(200, {}, "Video deleted successfully"));
 });
 
 const togglePublishStatus = asyncHandler(async (req, res) => {
@@ -118,7 +144,7 @@ const togglePublishStatus = asyncHandler(async (req, res) => {
     owner: req.user._id,
   });
   // console.log(req.user._id);
-  
+
   if (!toggleisPublished) {
     throw new ApiError(400, "Incorrect VideoId or owner");
   }
