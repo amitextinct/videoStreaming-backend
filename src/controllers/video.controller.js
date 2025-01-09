@@ -10,8 +10,101 @@ import {
 } from "../utils/cloudinary.js";
 
 const getAllVideos = asyncHandler(async (req, res) => {
-  const { page = 1, limit = 10, query, sortBy, sortType, userId } = req.query;
+  const {
+    page = 1,
+    limit = 10,
+    query = "",
+    sortBy = "createdAt",
+    sortType = 1,
+    userId = "",
+  } = req.query;
   //TODO: get all videos based on query, sort, pagination
+  let pipeline = [
+    {
+      $match: {
+        $and: [
+          {
+            // 2.1 match the videos based on title and description
+            $or: [
+              { title: { $regex: query, $options: "i" } }, // $regex: is used to search the string in the title "this is first video" => "first"  // i is for case-insensitive
+              { description: { $regex: query, $options: "i" } },
+            ],
+          },
+          // 2.2 match the videos based on userId=owner
+          ...(userId ? [{ owner: new mongoose.Types.ObjectId(userId) }] : ""), // if userId is present then match the owner field of video
+          // new mongoose.Types.ObjectId( userId ) => convert userId to ObjectId
+        ],
+      },
+    },
+    // 3. lookup the owner field of video and get the user details
+    {
+      // from user it match the _id of user with owner field of video and saved as owner
+      $lookup: {
+        from: "users",
+        localField: "owner",
+        foreignField: "_id",
+        as: "owner",
+        pipeline: [
+          // project the fields of user in owner
+          {
+            $project: {
+              _id: 1,
+              fullName: 1,
+              avatar: "$avatar.url",
+              username: 1,
+            },
+          },
+        ],
+      },
+    },
+    {
+      // 4. addFields just add the owner field to the video document
+      $addFields: {
+        owner: {
+          $first: "$owner", // $first: is used to get the first element of owner array
+        },
+      },
+    },
+    {
+      $sort: { [sortBy]: sortType }, // sort the videos based on sortBy and sortType
+    },
+  ];
+
+  try {
+    // 5. set options for pagination
+    const options = {
+      // options for pagination
+      page: parseInt(page),
+      limit: parseInt(limit),
+      customLabels: {
+        // custom labels for pagination
+        totalDocs: "totalVideos",
+        docs: "videos",
+      },
+    };
+
+    // 6. get the videos based on pipeline and options
+    const result = await Video.aggregatePaginate(
+      Video.aggregate(pipeline),
+      options
+    ); // Video.aggregate( pipeline ) find the videos based on pipeline(query, sortBy, sortType, userId). // aggregatePaginate is used for pagination (page, limit)
+
+    if (result?.videos?.length === 0) {
+      return res.status(404).json(new ApiResponse(404, {}, "No Videos Found"));
+    }
+
+    // result contain all pipeline videos and pagination details
+    return res
+      .status(200)
+      .json(new ApiResponse(200, result, "Videos fetched successfully"));
+  } catch (error) {
+    console.error(error.message);
+    return res
+      .status(500)
+      .json(
+        new ApiError(500, {}, "Internal server error in video aggregation")
+      );
+  }
 });
 
 const publishAVideo = asyncHandler(async (req, res) => {
@@ -104,6 +197,41 @@ const getVideoById = asyncHandler(async (req, res) => {
 const updateVideo = asyncHandler(async (req, res) => {
   const { videoId } = req.params;
   //TODO: update video details like title, description, thumbnail
+  const { title, description } = req.body;
+  const thumbnailLocalPath = req.file?.path;
+  if (!isValidObjectId(videoId)) {
+    throw new ApiError(400, "Invalid Video Id");
+  }
+  if ([title, description].some((field) => field.trim() === "")) {
+    throw new ApiError(400, "title or description cannot be empty");
+  }
+  const video = await Video.findById(videoId);
+  if (!video) {
+    throw new ApiError(400, "Incorrect VideoId");
+  }
+  if (!video.owner.equals(req.user._id)) {
+    throw new ApiError(400, "Unauthorized access");
+  }
+  if (thumbnailLocalPath) {
+    const thumbnailOnCloudnary = await uploadOnCloudinary(thumbnailLocalPath);
+    if (!thumbnailOnCloudnary) {
+      throw new ApiError(400, "Failed to upload thumbnail");
+    }
+    const isThumbnailDeletedFromCloudinary = await deleteFromCloudinary(
+      video.thumbnail,
+      "image"
+    );
+    if (!isThumbnailDeletedFromCloudinary) {
+      throw new ApiError(400, "Failed to delete thumbnail from cloudinary");
+    }
+    video.thumbnail = thumbnailOnCloudnary.url;
+  }
+  video.title = title;
+  video.description = description;
+  await video.save();
+  return res
+    .status(200)
+    .json(new ApiResponse(200, video, "Video updated successfully"));
 });
 
 const deleteVideo = asyncHandler(async (req, res) => {
@@ -120,8 +248,14 @@ const deleteVideo = asyncHandler(async (req, res) => {
   if (!video.owner.equals(req.user._id)) {
     throw new ApiError(400, "Unauthorized access");
   }
-  const isVideoDeletedFromCloudinary = await deleteFromCloudinary(video.videoFile, "video");
-  const isThumbnailDeletedFromCloudinary = await deleteFromCloudinary(video.thumbnail, "image");
+  const isVideoDeletedFromCloudinary = await deleteFromCloudinary(
+    video.videoFile,
+    "video"
+  );
+  const isThumbnailDeletedFromCloudinary = await deleteFromCloudinary(
+    video.thumbnail,
+    "image"
+  );
   if (!isVideoDeletedFromCloudinary || !isThumbnailDeletedFromCloudinary) {
     throw new ApiError(
       400,
