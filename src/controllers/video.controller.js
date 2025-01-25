@@ -170,25 +170,26 @@ const publishAVideo = asyncHandler(async (req, res) => {
 });
 
 const getVideoById = asyncHandler(async (req, res) => {
-  //   const { videoId } = req.params;
-  //TODO: get video by id
   try {
-    // 1. Get the video id from the request params(frontend)  [http://localhost:8000/api/v1/video/get-video/:videoId]
     const { videoId } = req.params;
 
-    // 2. Check if the videoId id is valid
     if (!isValidObjectId(videoId)) {
       throw new ApiError(400, "Invalid VideoID");
     }
 
-    // 3. Find the video in the database
-    const video = await Video.findById(videoId);
+    const video = await Video.findByIdAndUpdate(
+      videoId,
+      {
+        $inc: { views: 1 }
+      },
+      { new: true }
+    );
 
     if (!video) {
       throw new ApiError(400, "Failed to get Video details.");
     }
-
-    return res.status(200).json(new ApiResponse(200, video, "Video found "));
+    
+    return res.status(200).json(new ApiResponse(200, video, "Video found"));
   } catch (error) {
     res.status(501).json(new ApiError(501, {}, "Video not found"));
   }
