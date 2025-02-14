@@ -173,49 +173,19 @@ const getVideoLikeStatus = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Invalid video ID");
   }
 
-  const likeInfo = await Like.aggregate([
-    {
-      $match: {
-        video: new mongoose.Types.ObjectId(videoId),
-      },
-    },
-    {
-      $group: {
-        _id: null,
-        likeCount: { $sum: 1 },
-      },
-    },
-    {
-      $addFields: {
-        isLiked: {
-          $in: [
-            req.user?._id,
-            {
-              $map: {
-                input: "$likes",
-                as: "like",
-                in: "$$like.likedBy",
-              },
-            },
-          ],
-        },
-      },
-    },
-    {
-      $project: {
-        _id: 0,
-        likeCount: 1,
-        isLiked: 1,
-      },
-    },
-  ]);
+  const likeStatus = await Like.findOne({
+    video: videoId,
+    likedBy: req.user?._id
+  });
+
+  const likesCount = await Like.countDocuments({ video: videoId });
 
   return res.status(200).json(
     new ApiResponse(
       200,
       {
-        likeCount: likeInfo[0]?.likeCount || 0,
-        isLiked: likeInfo[0]?.isLiked || false,
+        likeCount: likesCount,
+        isLiked: !!likeStatus
       },
       "Video like info fetched successfully"
     )
@@ -229,49 +199,19 @@ const getCommentLikeStatus = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Invalid comment ID");
   }
 
-  const likeInfo = await Like.aggregate([
-    {
-      $match: {
-        comment: new mongoose.Types.ObjectId(commentId),
-      },
-    },
-    {
-      $group: {
-        _id: null,
-        likeCount: { $sum: 1 },
-      },
-    },
-    {
-      $addFields: {
-        isLiked: {
-          $in: [
-            req.user?._id,
-            {
-              $map: {
-                input: "$likes",
-                as: "like",
-                in: "$$like.likedBy",
-              },
-            },
-          ],
-        },
-      },
-    },
-    {
-      $project: {
-        _id: 0,
-        likeCount: 1,
-        isLiked: 1,
-      },
-    },
-  ]);
+  const likeStatus = await Like.findOne({
+    comment: commentId,
+    likedBy: req.user?._id
+  });
+
+  const likesCount = await Like.countDocuments({ comment: commentId });
 
   return res.status(200).json(
     new ApiResponse(
       200,
       {
-        likeCount: likeInfo[0]?.likeCount || 0,
-        isLiked: likeInfo[0]?.isLiked || false,
+        likeCount: likesCount,
+        isLiked: !!likeStatus
       },
       "Comment like info fetched successfully"
     )
@@ -285,49 +225,19 @@ const getTweetLikeStatus = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Invalid tweet ID");
   }
 
-  const likeInfo = await Like.aggregate([
-    {
-      $match: {
-        tweet: new mongoose.Types.ObjectId(tweetId),
-      },
-    },
-    {
-      $group: {
-        _id: null,
-        likeCount: { $sum: 1 },
-      },
-    },
-    {
-      $addFields: {
-        isLiked: {
-          $in: [
-            req.user?._id,
-            {
-              $map: {
-                input: "$likes",
-                as: "like",
-                in: "$$like.likedBy",
-              },
-            },
-          ],
-        },
-      },
-    },
-    {
-      $project: {
-        _id: 0,
-        likeCount: 1,
-        isLiked: 1,
-      },
-    },
-  ]);
+  const likeStatus = await Like.findOne({
+    tweet: tweetId,
+    likedBy: req.user?._id
+  });
+
+  const likesCount = await Like.countDocuments({ tweet: tweetId });
 
   return res.status(200).json(
     new ApiResponse(
       200,
       {
-        likeCount: likeInfo[0]?.likeCount || 0,
-        isLiked: likeInfo[0]?.isLiked || false,
+        likeCount: likesCount,
+        isLiked: !!likeStatus
       },
       "Tweet like info fetched successfully"
     )

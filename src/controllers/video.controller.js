@@ -30,6 +30,12 @@ const getAllVideos = asyncHandler(async (req, res) => {
               { description: { $regex: query, $options: "i" } },
             ],
           },
+          {
+            $and: [
+              { isPublished: true },
+              { owner: req.user?._id } // Include unpublished videos if user is the owner
+            ]
+          },
           // 2.2 match the videos based on userId=owner
           ...(userId ? [{ owner: new mongoose.Types.ObjectId(userId) }] : ""), // if userId is present then match the owner field of video
           // new mongoose.Types.ObjectId( userId ) => convert userId to ObjectId
