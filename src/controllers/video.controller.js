@@ -18,27 +18,27 @@ const getAllVideos = asyncHandler(async (req, res) => {
     sortType = 1,
     userId = "",
   } = req.query;
-  //TODO: get all videos based on query, sort, pagination
+
+  // Convert sortType to number since it comes as string from query params
+  const sortValue = parseInt(sortType) || 1;
+
   let pipeline = [
     {
       $match: {
         $and: [
           {
-            // 2.1 match the videos based on title and description
             $or: [
-              { title: { $regex: query, $options: "i" } }, // $regex: is used to search the string in the title "this is first video" => "first"  // i is for case-insensitive
+              { title: { $regex: query, $options: "i" } },
               { description: { $regex: query, $options: "i" } },
             ],
           },
           {
-            $and: [
+            $or: [
               { isPublished: true },
-              { owner: req.user?._id } // Include unpublished videos if user is the owner
+              { owner: req.user?._id } // Show unpublished videos only to their owner
             ]
           },
-          // 2.2 match the videos based on userId=owner
-          ...(userId ? [{ owner: new mongoose.Types.ObjectId(userId) }] : ""), // if userId is present then match the owner field of video
-          // new mongoose.Types.ObjectId( userId ) => convert userId to ObjectId
+          ...(userId ? [{ owner: new mongoose.Types.ObjectId(userId) }] : []),
         ],
       },
     },
@@ -72,7 +72,7 @@ const getAllVideos = asyncHandler(async (req, res) => {
       },
     },
     {
-      $sort: { [sortBy]: sortType }, // sort the videos based on sortBy and sortType
+      $sort: { [sortBy]: sortValue }, // Modified this line to use the parsed number
     },
   ];
 
