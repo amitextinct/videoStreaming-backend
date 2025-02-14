@@ -71,6 +71,20 @@ const getAllVideos = asyncHandler(async (req, res) => {
         },
       },
     },
+    // Add this new stage to project isPublished
+    {
+      $project: {
+        videoFile: 1,
+        thumbnail: 1,
+        title: 1,
+        description: 1,
+        duration: 1,
+        views: 1,
+        owner: 1,
+        createdAt: 1,
+        isPublished: 1
+      }
+    },
     {
       $sort: { [sortBy]: sortValue }, // Modified this line to use the parsed number
     },
@@ -183,24 +197,74 @@ const getVideoById = asyncHandler(async (req, res) => {
       throw new ApiError(400, "Invalid VideoID");
     }
 
-    const video = await Video.findByIdAndUpdate(
+    const video = await Video.aggregate([
+      {
+        $match: {
+          _id: new mongoose.Types.ObjectId(videoId)
+        }
+      },
+      {
+        $lookup: {
+          from: "users",
+          localField: "owner",
+          foreignField: "_id",
+          as: "owner",
+          pipeline: [
+            {
+              $lookup: {
+                from: "subscriptions",
+                localField: "_id",
+                foreignField: "channel",
+                as: "subscribers"
+              }
+            },
+            {
+              $addFields: {
+                subscribersCount: { $size: "$subscribers" }
+              }
+            },
+            {
+              $project: {
+                username: 1,
+                avatar: 1,
+                subscribersCount: 1
+              }
+            }
+          ]
+        }
+      },
+      {
+        $addFields: {
+          owner: { $first: "$owner" }
+        }
+      },
+      {
+        $set: {
+          views: { $add: ["$views", 1] }
+        }
+      }
+    ]);
+
+    if (!video?.length) {
+      throw new ApiError(404, "Video not found");
+    }
+
+    // Save the updated view count
+    await Video.findByIdAndUpdate(
       videoId,
       {
-        $inc: { views: 1 }
-      },
-      { new: true }
+        $set: { views: video[0].views }
+      }
     );
 
-    if (!video) {
-      throw new ApiError(400, "Failed to get Video details.");
-    }
-    
-    return res.status(200).json(new ApiResponse(200, video, "Video found"));
+    return res
+      .status(200)
+      .json(new ApiResponse(200, video[0], "Video fetched successfully"));
+
   } catch (error) {
-    res.status(501).json(new ApiError(501, {}, "Video not found"));
+    throw new ApiError(500, error?.message || "Error while fetching video");
   }
 });
-
 
 const updateVideo = asyncHandler(async (req, res) => {
   const { videoId } = req.params;
