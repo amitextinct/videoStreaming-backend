@@ -60,6 +60,7 @@ const getVideoComments = asyncHandler(async (req, res) => {
       $project:{
         content: 1,
         createdBy: 1,
+        createdAt: 1
       },
     },
     {
